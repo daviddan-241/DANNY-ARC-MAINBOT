@@ -216,6 +216,9 @@ async def post_init(app: Application) -> None:
                 _dbline = f"DB: <code>{_DBP}</code> ({_sz // 1024} KB)"
         except Exception as _exc:
             _dbline = f"DB status failed: {_exc}"
+        _renamed = getattr(db, "_SCHEMA_RENAMED", [])
+        if _renamed:
+            _dbline += "\n⚠️ Incompatible tables moved aside: " + ", ".join(_renamed)
         await alert(
             f"🟢 <b>{BOT_NAME} booted</b>\n"
             f"Menu: {len(BOT_COMMANDS)} cmds ({menu_ok}/3 scopes)\n" + _dbline
