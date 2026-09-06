@@ -240,4 +240,36 @@ def support_text(lang: str) -> str:
 
 
 def bot_description() -> str:
-    return f"This is the official {BOT_NAME} bot 🔫 deployed by {BOT_HANDLE}."
+    return (
+        f"{BOT_NAME} — the multi-chain trading desk on Telegram.\n\n"
+        "⚡ Trade any CA in seconds · snipe launches · copy wallets · bridge\n"
+        "🚀 Pump & DEX growth services — real orders, paid on-chain, verified by hand\n"
+        "💎 VIP — call channel, priority slots, direct line\n\n"
+        "Non-custodial: import your own wallet, keys stay yours. Every balance "
+        "and order state is the real on-chain truth. Support 24/7 via /support."
+    )
+
+
+def main_caption(lang: str = "en") -> str:
+    """Main screen text — sent TOGETHER with the ARC logo as the photo caption."""
+    return t(
+        lang,
+        f"⚡ <b>{BOT_NAME}</b> — the desk serious traders keep open.\n\n"
+        "Trade any token in seconds: paste a CA, set your size, fire. Snipe "
+        "pumps, copy wallets, run limit orders and bridge — from one bot, with "
+        "your own wallets. Keys stay yours.\n\n"
+        "🚀 <b>Pump Services</b> — trending slots + raid boosts for launches\n"
+        "📊 <b>DEX Services</b> — volume, trending hub, button ads\n"
+        "💎 <b>VIP</b> — call channel, priority slots, direct line\n\n"
+        "Paid in SOL on-chain, verified by hand — every order real, every "
+        "state honest.\n\n"
+        "New here? Tap ⚡ Trade and paste any contract address. Need a hand? /support",
+        f"⚡ <b>{BOT_NAME}</b> — 认真交易者的工作台。\n\n"
+        "粘贴 CA 秒级交易 · 抢跑打新 · 跟单 · 跨链桥 — 一个机器人全搞定，钱包你自己掌管。\n\n"
+        "🚀 <b>Pump 服务</b> · 📊 <b>DEX 服务</b> · 💎 <b>VIP</b>\n\n"
+        "SOL 链上支付，人工核验 — 每一单都真实。\n\n"
+        "开始：点 ⚡ Trade 粘结合约地址。需要帮助？/support",
+    )
+
+
+

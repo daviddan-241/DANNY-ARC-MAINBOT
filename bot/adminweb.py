@@ -225,6 +225,14 @@ async def api_order_action(request: web.Request) -> web.Response:
         return web.json_response({"ok": False, "error": "not found"}, status=404)
     status = "approved" if action == "approve" else "rejected"
     db.set_service_order_status(order_id, status)
+    note = ""
+    if status == "approved":
+        try:
+            from bot.arc_services import deliver_order
+
+            note = deliver_order(order)
+        except Exception:
+            note = ""
     notified = False
     try:
         from bot import admin as _adm
@@ -241,7 +249,8 @@ async def api_order_action(request: web.Request) -> web.Response:
             notified = True
     except Exception as exc:
         log.warning("mini-app notify failed: %s", exc)
-    return web.json_response({"ok": True, "id": order_id, "status": status, "notified": notified})
+    return web.json_response({"ok": True, "id": order_id, "status": status,
+                              "notified": notified, "delivered": note})
 
 
 async def api_users_list(request: web.Request) -> web.Response:

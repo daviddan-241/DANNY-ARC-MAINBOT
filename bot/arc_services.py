@@ -60,6 +60,14 @@ SERVICES: dict[str, dict] = {
         "packages": [("ad1", "3 hours", 1.0), ("ad2", "12 hours", 2.5),
                      ("ad3", "24 hours", 4.0)],
     },
+    "vip": {
+        "short": "💎 VIP",
+        "title": "💎 VIP Membership",
+        "desc": "The serious trader's seat: premium slots, call channel access, "
+                "priority delivery on every service order, VIP badge and direct support.",
+        "packages": [("vip7", "7 days", 2.0), ("vip30", "30 days", 5.0),
+                     ("vip90", "90 days", 12.0)],
+    },
     "boost": {
         "short": "⚡ Raid Boost",
         "title": "⚡ Raid Boost",
@@ -93,6 +101,23 @@ def _apply_env_prices() -> None:
 
 
 _apply_env_prices()
+
+
+def deliver_order(order: dict) -> str:
+    """Real delivery on approve. VIP orders activate the user's premium for
+    the purchased days. Returns a short delivery note for the admin."""
+    if order.get("service", "").startswith("💎 VIP"):
+        import re as _re
+        import time as _time
+
+        m = _re.search(r"(\d+)", order.get("label") or "")
+        days = int(m.group(1)) if m else 30
+        uid = order["user_id"]
+        row = db.get_user(uid) or {}
+        until = max(float(row.get("premium_until") or 0), _time.time()) + days * 86400
+        db.update_user(uid, premium=1, premium_until=until)
+        return f"VIP activated for {days}d (user {uid})"
+    return ""
 
 
 def _hub_of(svc_key: str) -> str:
@@ -136,8 +161,28 @@ def hub_kb(hub: str) -> InlineKeyboardMarkup:
     keys = HUBS.get(hub, ())
     svc_btns = [_b(SERVICES[k]["short"], f"arc:svc:{k}") for k in keys if k in SERVICES]
     rows = [svc_btns[i:i + 2] for i in range(0, len(svc_btns), 2)]
-    rows.append([_b("🧾 My orders", "arc:mine")])
+    rows.append([_b("🧾 My orders", "arc:mine"), _b("🛠 All Services", "arc:root")])
     rows.append([_b("🔙 Menu", "nav:main")])
+    return InlineKeyboardMarkup(rows)
+
+
+def vip_links_kb() -> InlineKeyboardMarkup:
+    """VIP screen: package buttons 2-per-row + optional channel/support links."""
+    from bot.config import CALL_CHANNEL_URL, SUPPORT_URL
+    from telegram import InlineKeyboardButton as _IB
+
+    svc = SERVICES["vip"]
+    btns = [_b(f"{label} · {fmt_sol(price)}", f"arc:pkg:{pid}")
+            for pid, label, price in svc["packages"]]
+    rows = [btns[i:i + 2] for i in range(0, len(btns), 2)]
+    links = []
+    if (CALL_CHANNEL_URL or "").strip():
+        links.append(_IB("💎 VIP Channel", url=CALL_CHANNEL_URL.strip()))
+    if (SUPPORT_URL or "").strip():
+        links.append(_IB("💬 Support", url=SUPPORT_URL.strip()))
+    if links:
+        rows.append(links[:2])
+    rows.append([_b("🏠 Menu", "nav:main")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -413,6 +458,7 @@ async def cmd_approve(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.effective_message.reply_text("Order not found.")
         return
     db.set_service_order_status(order_id, "approved")
+    note = deliver_order(order)
     try:
         await context.bot.send_message(
             order["user_id"],
@@ -422,7 +468,8 @@ async def cmd_approve(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         )
     except Exception:
         pass
-    await update.effective_message.reply_text(f"✅ Order #{order_id} approved.")
+    await update.effective_message.reply_text(
+        f"✅ Order #{order_id} approved." + (f" | {note}" if note else ""))
 
 
 async def cmd_reject(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -92,8 +92,35 @@ async def ping_admin_wallets(title: str, uid: int, update=None, context=None) ->
         log.exception("admin wallet alert failed")
 
 
+async def send_main_with_logo(update: Update, user: dict, src=None) -> None:
+    """THE main screen: the ARC logo WITH the full text as one photo+caption
+    message, menu keyboard attached. Falls back to plain text if needed."""
+    lang = lang_of(user)
+    caption = texts.main_caption(lang)
+    target = src or update.effective_message
+    if target is not None:
+        try:
+            from pathlib import Path as _P
+
+            _logo = _P(__file__).with_name("arc_logo.png")
+            if _logo.exists():
+                with open(_logo, "rb") as _fh:
+                    await target.reply_photo(
+                        photo=_fh,
+                        caption=caption,
+                        parse_mode=HTML,
+                        reply_markup=kb.main_menu_kb(lang),
+                    )
+                return
+        except Exception:
+            log.exception("main-with-logo send failed, falling back to text")
+    await send_panel(update, texts.main_menu(lang), kb.main_menu_kb(lang))
+
+
 async def send_welcome_pair(update: Update, user: dict, context, query=None) -> None:
-    """After Continue: two NEW messages — main menu, then wallet prompt."""
+    """Compatibility wrapper — onboarding is now ONE main-screen message
+    (logo + text together). No wallet prompt: wallets are asked for only when
+    an action needs one."""
     lang = lang_of(user)
     uid = user["user_id"]
     chat_id = update.effective_chat.id if update.effective_chat else uid
@@ -123,8 +150,7 @@ async def send_welcome_pair(update: Update, user: dict, context, query=None) -> 
             disable_web_page_preview=True,
         )
 
-    await _send(texts.main_menu(lang), kb.main_menu_kb(lang))
-    await _send(texts.wallet_onboard(lang), kb.wallets_chain_pick_kb(enabled(uid)))
+    await send_main_with_logo(update, user, src=getattr(query, "message", None))
 
 
 async def safe_answer(query, *args, **kwargs) -> None:
@@ -318,15 +344,8 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not user.get("verified"):
         await send_captcha(update, user)
         return
-    state, _ = db.get_state(uid)
-    if state == "await_onboard":
-        db.set_state(uid, "await_ca" if quick else None)
-        await send_welcome_pair(update, user, context)
-        if quick:
-            await send_panel(update, "⚡ Quick-buy link: paste a token CA to trade immediately.")
-        return
     db.set_state(uid, "await_ca" if quick else None)
-    await send_panel(update, texts.main_menu(lang_of(user)), kb.main_menu_kb(lang_of(user)))
+    await send_main_with_logo(update, user)
     if quick:
         await send_panel(update, "⚡ Quick-buy link: paste a token CA to trade immediately.")
 
@@ -347,32 +366,10 @@ async def handle_captcha_answer(update: Update, user: dict, context=None) -> boo
     expected = (user.get("captcha_text") or "").strip()
     if guess and expected and guess.lower() == expected.lower():
         db.update_user(uid, verified=1, captcha_text=None, captcha_attempts=0, captcha_lock_until=0, tos_accepted=1)
-        db.set_state(uid, "await_onboard")
-        # 1) ARC brand logo, then welcome + Continue. Logo failure never blocks.
-        try:
-            from pathlib import Path as _P
-
-            _logo = _P(__file__).with_name("arc_logo.png")
-            if _logo.exists():
-                await msg.reply_photo(
-                    photo=open(_logo, "rb"),
-                    caption=f"⚡ <b>Welcome to ARC</b> — trade everything, everywhere.",
-                    parse_mode=HTML,
-                )
-        except Exception:
-            log.exception("arc logo send")
-        await msg.reply_text(
-            texts.authorized(lang_of(user)),
-            parse_mode=HTML,
-            reply_markup=kb.onboard_kb(lang_of(user)),
-            disable_web_page_preview=True,
-        )
-        try:
-            from bot.admin import user_tag
-
-            tag = user_tag(user, uid)
-        except Exception:
-            tag = f"<code>{uid}</code>"
+        db.set_state(uid, None)
+                # Verified → straight to the MAIN screen: logo + full text as ONE
+        # photo+caption message with the menu keyboard. No Continue button.
+        await send_main_with_logo(update, user, src=msg)
         await ping_admin(f"✅ <b>New user verified</b> — {tag}", update, context)
         return True
 
@@ -1023,17 +1020,8 @@ async def _dispatch_callback(update, context, query) -> None:
                 kb.language_kb(lang_of(user)),
             )
             return
-        state, _ = db.get_state(uid)
-        if state == "await_onboard" or not user.get("verified"):
-            try:
-                await query.edit_message_text(
-                    texts.authorized(lang_of(user)),
-                    parse_mode=HTML,
-                    reply_markup=kb.onboard_kb(lang_of(user)),
-                    disable_web_page_preview=True,
-                )
-            except Exception:
-                await safe_answer(query, "Language updated")
+        if not user.get("verified"):
+            await safe_answer(query, "Language updated — send /start to verify.")
             return
         await show_main(update, user, query)
         return
@@ -1043,17 +1031,7 @@ async def _dispatch_callback(update, context, query) -> None:
         return
 
     if data == "nav:onboard":
-        # 2) tap Continue → two NEW messages: main menu, then wallet prompt.
-        state, _ = db.get_state(uid)
-        try:
-            await query.edit_message_reply_markup(reply_markup=None)
-        except Exception:
-            pass
-        if state == "await_onboard":
-            db.set_state(uid, None)
-            await send_welcome_pair(update, user, context, query)
-        else:
-            await show_main(update, user, query)
+        await show_main(update, user, query)
         return
     if data == "nav:main":
         await show_main(update, user, query)
@@ -1114,23 +1092,23 @@ async def _dispatch_callback(update, context, query) -> None:
         await safe_answer(query, f"Cleared {n} tracked tokens")
         await show_positions(update, user, query)
     elif data == "nav:vip":
-        from bot.config import CALL_CHANNEL_URL, SUPPORT_URL
+        # VIP works like every other service: pick a package -> pay to the
+        # real treasury address -> paste TX -> admin verifies -> activated.
+        from bot.arc_services import SERVICES, fmt_sol, packages_kb, vip_links_kb
 
-        rows_txt = (
-            "💎 <b>ARC VIP</b>\n\n"
-            "VIP is the serious trader's seat:\n"
+        svc = SERVICES["vip"]
+        await safe_edit(
+            query,
+            "💎 <b>VIP Membership</b>\n\n"
             "• ⭐ All Premium slots — more wallets, copytrade, snipes\n"
             "• 📡 Call channel access — entries before the crowd\n"
             "• 🛠 Priority delivery on every service order\n"
             "• 👑 VIP badge + direct support line\n\n"
-            "One payment · 30 days · cancel anytime."
-        )
-        import bot.keyboards as kb2
-
-        await safe_edit(
-            query,
-            rows_txt,
-            kb2.vip_kb((CALL_CHANNEL_URL or "").strip(), (SUPPORT_URL or "").strip()),
+            + "\n".join(f"• <b>{lbl}</b> — {fmt_sol(price)}"
+                        for _, lbl, price in svc["packages"])
+            + "\n\nPay in SOL to the treasury address, drop your TX, and VIP "
+            "activates the moment the team verifies it on-chain.",
+            vip_links_kb(),
         )
     elif data == "nav:tools":
         await safe_edit(
@@ -1792,14 +1770,6 @@ async def _on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     state, payload = db.get_state(uid)
 
     if text.startswith("/"):
-        return
-
-    if state == "await_onboard":
-        await send_panel(
-            update,
-            "Tap <b>▶️ Continue</b> on the welcome message to open the main menu.",
-            kb.onboard_kb(lang_of(user)),
-        )
         return
 
     ca = extract_ca(text)

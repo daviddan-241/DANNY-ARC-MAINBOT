@@ -176,7 +176,7 @@ async def post_init(app: Application) -> None:
     try:
         await app.bot.set_my_description(texts.bot_description()[:512])
         await app.bot.set_my_short_description(
-            f"{BOT_NAME}, the one-stop solution for all your trading needs!"[:120]
+            f"{BOT_NAME} — multi-chain trading desk + launch services. Trade, snipe, bridge, grow."[:120]
         )
     except Exception as exc:
         log.warning("Could not set bot description: %s", exc)
