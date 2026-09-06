@@ -139,7 +139,16 @@ class _PgConn:
         p = tuple(params) if params else None
         stripped = sql2.strip().lstrip("(").strip().upper()
         if stripped.startswith("INSERT") and "RETURNING" not in sql2.upper():
-            cur = self._real.execute(sql2 + " RETURNING id", p)
+            # lastrowid shim: fetch the row id when the table HAS an id
+            # column; tables whose PK is named differently (users.user_id,
+            # user_state, chain_prefs, ...) get a plain INSERT instead.
+            try:
+                cur = self._real.execute(sql2 + " RETURNING id", p)
+            except Exception as exc:
+                if 'column "id" does not exist' in str(exc):
+                    cur = self._real.execute(sql2, p)
+                    return _PgCursor(cur, None)
+                raise
             try:
                 row = cur.fetchone()
                 last_id = row["id"] if row else None
