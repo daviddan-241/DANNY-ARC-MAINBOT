@@ -1,0 +1,44 @@
+services:
+  - type: web
+    name: arc-mainbot
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python run.py
+    healthCheckPath: /health
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: ADMIN_CHAT_ID
+        sync: false
+      - key: CALL_CHANNEL
+        sync: false
+      - key: CALL_CHANNEL_URL
+        sync: false
+      - key: BOT_NAME
+        value: Deluge
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: FORCE_POLLING
+        value: "0"
+      - key: FEE_BPS
+        value: "100"
+      - key: FEE_EVM_ADDRESS
+        sync: false
+      - key: FEE_SOL_ADDRESS
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: PREMIUM_USD
+        value: "200"
+      - key: PREMIUM_DAYS
+        value: "30"
+      - key: BIRDEYE_API_KEY
+        sync: false
+    # NOTE: Render Free has no persistent disk — SQLite + auto-backups in
+    # bot/persist.py survive restarts, but a full redeploy on Free can still
+    # wipe data/. For real persistence, upgrade to Starter and add:
+    # disk:
+    #   name: solo-metro-data
+    #   mountPath: /var/data
+    #   sizeGB: 1
