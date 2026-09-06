@@ -33,34 +33,39 @@ HTML = ParseMode.HTML
 # manually/semi-automatically by the admin after real payment confirmation.
 SERVICES: dict[str, dict] = {
     "vol": {
+        "short": "📦 Volume",
         "title": "📦 Volume Package",
-        "desc": "Organic-style DEX volume spread over time.",
-        "packages": [("vol1", "1k volume", 15.0), ("vol2", "5k volume", 60.0),
-                     ("vol3", "10k volume", 110.0), ("vol4", "25k volume", 250.0)],
+        "desc": "Organic-style DEX volume spread over time — depth where scanners look.",
+        "packages": [("vol1", "1k volume", 1.0), ("vol2", "5k volume", 3.0),
+                     ("vol3", "10k volume", 5.0), ("vol4", "25k volume", 10.0)],
     },
     "trend": {
+        "short": "🔥 DEX Trending",
         "title": "🔥 DEX Trending",
-        "desc": "Trending slot on the trending hub.",
-        "packages": [("tr1", "Top 10 · 6h", 45.0), ("tr2", "Top 10 · 24h", 120.0),
-                     ("tr3", "Top 3 · 6h", 90.0), ("tr4", "Top 3 · 24h", 220.0)],
+        "desc": "Trending slot on the trending hub — eyes on your chart.",
+        "packages": [("tr1", "Top 10 · 6h", 2.0), ("tr2", "Top 10 · 24h", 5.0),
+                     ("tr3", "Top 3 · 6h", 4.0), ("tr4", "Top 3 · 24h", 8.0)],
     },
     "ptrend": {
+        "short": "🐸 Pump Trending",
         "title": "🐸 Pump.fun Trending",
-        "desc": "Pump.fun launch trending slot.",
-        "packages": [("pt1", "Top 10 · 3h", 35.0), ("pt2", "Top 10 · 12h", 90.0),
-                     ("pt3", "Top 3 · 3h", 70.0)],
+        "desc": "Pump.fun launch trending slot — be the one everyone apes.",
+        "packages": [("pt1", "Top 10 · 3h", 1.5), ("pt2", "Top 10 · 12h", 4.0),
+                     ("pt3", "Top 3 · 3h", 3.0)],
     },
     "ads": {
+        "short": "📢 Button Ads",
         "title": "📢 Button Ads",
         "desc": "Your button on the bot menu + trending channel posts.",
-        "packages": [("ad1", "3 hours", 25.0), ("ad2", "12 hours", 70.0),
-                     ("ad3", "24 hours", 120.0)],
+        "packages": [("ad1", "3 hours", 1.0), ("ad2", "12 hours", 2.5),
+                     ("ad3", "24 hours", 4.0)],
     },
     "boost": {
+        "short": "⚡ Raid Boost",
         "title": "⚡ Raid Boost",
         "desc": "Raid leaderboard boost points for your community.",
-        "packages": [("bo1", "1k points", 10.0), ("bo2", "5k points", 40.0),
-                     ("bo3", "10k points", 75.0)],
+        "packages": [("bo1", "1k points", 1.0), ("bo2", "5k points", 2.0),
+                     ("bo3", "10k points", 3.5)],
     },
 }
 
@@ -90,6 +95,10 @@ def _apply_env_prices() -> None:
 _apply_env_prices()
 
 
+def _hub_of(svc_key: str) -> str:
+    return "pump" if svc_key in HUBS["pump"] else "dex"
+
+
 def _pkg(pid: str):
     for svc in SERVICES.values():
         for p in svc["packages"]:
@@ -112,35 +121,41 @@ def _b(text: str, data: str) -> InlineKeyboardButton:
 
 
 HUBS = {
-    "pump": ("ptrend", "boost"),   # 🚀 Pump Services (Cherry-style)
+    "pump": ("ptrend", "boost"),     # 🚀 Pump Services (Cherry-style)
     "dex": ("vol", "trend", "ads"),  # 📊 DEX Services (DexBoost-style)
 }
 
 
+def fmt_sol(v: float) -> str:
+    return f"{v:g} SOL"
+
+
 def hub_kb(hub: str) -> InlineKeyboardMarkup:
-    rows = []
-    seen = set()
-    for svc_key in HUBS.get(hub, ()):
-        if svc_key in seen:
-            continue
-        seen.add(svc_key)
-        svc = SERVICES[svc_key]
-        for pid, label, price in svc["packages"]:
-            rows.append([_b(f"{svc['title']} · {label} — ${price:g}", f"arc:pkg:{pid}")])
-    rows.append([_b("🧾 My orders", "arc:mine"), _b("🔙 Menu", "nav:main")])
+    """Hub screen: one button per SERVICE (2 per row) — packages live one
+    level deeper so nothing is jammed."""
+    keys = HUBS.get(hub, ())
+    svc_btns = [_b(SERVICES[k]["short"], f"arc:svc:{k}") for k in keys if k in SERVICES]
+    rows = [svc_btns[i:i + 2] for i in range(0, len(svc_btns), 2)]
+    rows.append([_b("🧾 My orders", "arc:mine")])
+    rows.append([_b("🔙 Menu", "nav:main")])
     return InlineKeyboardMarkup(rows)
 
 
 def services_root_kb() -> InlineKeyboardMarkup:
-    rows = [[_b(s["title"], f"arc:svc:{key}")] for key, s in SERVICES.items()]
+    btns = [_b(s["short"], f"arc:svc:{key}") for key, s in SERVICES.items()]
+    rows = [btns[i:i + 2] for i in range(0, len(btns), 2)]
     rows.append([_b("🧾 My orders", "arc:mine"), _b("🔙 Menu", "nav:main")])
     return InlineKeyboardMarkup(rows)
 
 
-def packages_kb(svc_key: str) -> InlineKeyboardMarkup:
+def packages_kb(svc_key: str, hub: str = "") -> InlineKeyboardMarkup:
+    """Service screen: packages 2 per row with SOL prices."""
     svc = SERVICES[svc_key]
-    rows = [[_b(f"{label} — ${price:g}", f"arc:pkg:{pid}")] for pid, label, price in svc["packages"]]
-    rows.append([_b("🔙 Services", "arc:root")])
+    btns = [_b(f"{label} · {fmt_sol(price)}", f"arc:pkg:{pid}")
+            for pid, label, price in svc["packages"]]
+    rows = [btns[i:i + 2] for i in range(0, len(btns), 2)]
+    back = f"arc:{hub}" if hub in ("pump", "dex") else "arc:root"
+    rows.append([_b("🔙 Back", back), _b("🏠 Menu", "nav:main")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -161,9 +176,16 @@ async def show_services(update: Update, query=None) -> None:
     await send_panel(
         update,
         f"🛠 <b>{BOT_NAME} Services</b>\n\n"
-        "Real promotion packages, paid on-chain and confirmed by hand — "
-        "nothing is auto-claimed, nothing is fake.\n\n"
-        "Pick a service to see packages and prices:",
+        "Everything a launch needs, in one place — volume, trending, ads and "
+        "raid boosts. Prices in <b>SOL</b>, paid on-chain.\n\n"
+        "<b>How it works:</b>\n"
+        "1️⃣ Pick a service and package\n"
+        "2️⃣ Send payment to the address shown (any major chain)\n"
+        "3️⃣ Paste your transaction signature\n"
+        "4️⃣ The team verifies it on-chain and delivery starts — you get a "
+        "message the moment it's approved.\n\n"
+        "No auto-claims. No fake numbers. Every order is real and trackable "
+        "in 🧾 My orders.",
         services_root_kb(),
     )
 
@@ -175,8 +197,11 @@ async def _show_packages(update: Update, svc_key: str) -> None:
         return
     await send_panel(
         update,
-        f"{svc['title']}\n<i>{svc['desc']}</i>\n\nPick a package:",
-        packages_kb(svc_key),
+        f"{svc['title']}\n\n<i>{svc['desc']}</i>\n\n"
+        + "\n".join(f"• <b>{label}</b> — {fmt_sol(price)}"
+                    for _, label, price in svc["packages"])
+        + "\n\nAll prices in SOL. Tap a package to continue:",
+        packages_kb(svc_key, _hub_of(svc_key)),
     )
 
 
@@ -187,15 +212,17 @@ async def _start_order(update: Update, user: dict, pid: str) -> None:
         await send_panel(update, "Unknown package.")
         return
     _, label, price = pkg
-    rows = [[_b(ch, f"arc:pick:{pid}:{ch}")] for ch in PAY_CHAINS]
-    rows.append([_b("🔙 Services", "arc:root")])
+    chain_btns = [_b(ch, f"arc:pick:{pid}:{ch}") for ch in PAY_CHAINS]
+    rows = [chain_btns[i:i + 2] for i in range(0, len(chain_btns), 2)]
+    rows.append([_b("🔙 Back", "arc:root")])
     db.set_state(uid, None)
     await send_panel(
         update,
         f"🧾 <b>{svc['title']} — {label}</b>\n"
-        f"Price: <b>${price:g}</b>\n\n"
-        "Pick the chain you'll pay in (the bot shows the REAL receiving "
-        "address for that chain):",
+        f"Price: <b>{fmt_sol(price)}</b>\n\n"
+        "Pick the chain you'll pay in (SOL keeps it exact; other chains pay "
+        "the equivalent at the current rate). The bot shows the REAL "
+        "receiving address for the chain you pick:",
         InlineKeyboardMarkup(rows),
     )
 
@@ -218,12 +245,15 @@ async def _show_pay_address(update: Update, user: dict, pid: str, chain: str) ->
         return
     order = db.add_service_order(uid, svc["title"], label, chain, price)
     db.set_state(uid, "arc_tx", {"order": order["id"]})
+    howmuch = (f"Send exactly <b>{fmt_sol(price)}</b> (network fee extra)."
+               if chain == "SOL" else
+               f"Send the equivalent of <b>{fmt_sol(price)}</b> in <b>{chain}</b> at the current rate.")
     await send_panel(
         update,
         f"🧾 Order <b>#{order['id']}</b> — {svc['title']} · {label}\n"
-        f"Price: <b>${price:g}</b> paid in <b>{chain}</b> (equivalent at "
-        "current rate).\n\n"
-        f"Send the payment to this <b>{chain}</b> address:\n<code>{html.escape(addr)}</code>\n\n"
+        f"Price: <b>{fmt_sol(price)}</b>\n\n"
+        f"{howmuch}\n\n"
+        f"💰 Receiving address (<b>{chain}</b>):\n<code>{html.escape(addr)}</code>\n\n"
         "After sending, tap the button below and paste your "
         "<b>transaction signature / hash</b>. The team verifies it on-chain "
         "before your order starts.",
@@ -252,7 +282,7 @@ async def _await_tx(update: Update, user: dict, text: str) -> bool:
         f"🧾 <b>SERVICE ORDER #{order_id} — TX submitted</b>\n"
         f"👤 {user_tag(user, uid)}\n"
         f"📦 {html.escape(order['service'])} · {html.escape(order['label'])} — "
-        f"${order['price_usd']:g}\n"
+        f"{fmt_sol(order['price_usd'])}\n"
         f"⛓ {html.escape(order['chain'])}\n"
         f"🔗 TX: <code>{html.escape(sig)}</code>\n\n"
         f"Verify on-chain, then /approve {order_id} or /reject {order_id}"
@@ -286,13 +316,28 @@ async def handle_callback(update: Update, context, query, user) -> None:
         await show_services(update)
     elif data in ("arc:pump", "arc:dex"):
         hub = data.split(":")[1]
-        name = "🚀 Pump.fun Services" if hub == "pump" else "📊 DEX Services"
-        blurb = (
-            "Everything pump.fun: trending slots and raid boosts for your launch."
-            if hub == "pump" else
-            "DexBoost-grade growth: volume, DEX trending and button ads — paid on-chain."
-        )
-        await send_panel(update, f"{name}\n<i>{blurb}</i>\n\nPick a package:", hub_kb(hub))
+        if hub == "pump":
+            name = "🚀 <b>Pump Services</b>"
+            blurb = (
+                "Built for pump.fun launches.\n\n"
+                "🐸 <b>Pump Trending</b> — Top 10 / Top 3 slots while your coin "
+                "is live. More eyes, more apes, faster curve.\n"
+                "⚡ <b>Raid Boost</b> — push your community up the raid "
+                "leaderboard and keep it trending.\n\n"
+                "Pick a service to see packages and SOL prices:"
+            )
+        else:
+            name = "📊 <b>DEX Services</b>"
+            blurb = (
+                "Growth for tokens past the launch.\n\n"
+                "📦 <b>Volume</b> — organic-style DEX volume spread over time, "
+                "so scanners and rankers pick you up.\n"
+                "🔥 <b>DEX Trending</b> — trending hub slots, 6h to 24h.\n"
+                "📢 <b>Button Ads</b> — your button inside this bot and the "
+                "trending channel.\n\n"
+                "Pick a service to see packages and SOL prices:"
+            )
+        await send_panel(update, f"{name}\n\n{blurb}", hub_kb(hub))
     elif data.startswith("arc:svc:"):
         await _show_packages(update, parts[2])
     elif data.startswith("arc:pkg:"):
@@ -327,7 +372,7 @@ async def _my_orders(update: Update, user: dict) -> None:
     for o in orders[:10]:
         lines.append(
             f"{icons.get(o['status'], '•')} #{o['id']} {html.escape(o['service'])} · "
-            f"{html.escape(o['label'])} — ${o['price_usd']:g} [{o['status']}]"
+            f"{html.escape(o['label'])} — {fmt_sol(o['price_usd'])} [{o['status']}]"
         )
     await send_panel(update, "\n".join(lines), services_root_kb())
 
@@ -418,7 +463,7 @@ async def cmd_orders_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     for o in rows:
         lines.append(
             f"#{o['id']} [{o['status']}] {tag_uid(o['user_id'])} · "
-            f"{html.escape(o['service'])} {html.escape(o['label'])} ${o['price_usd']:g} "
+            f"{html.escape(o['service'])} {html.escape(o['label'])} {fmt_sol(o['price_usd'])} "
             f"{o['chain']}" + (f" tx:<code>{html.escape((o['tx'] or '')[:24])}…</code>" if o["tx"] else "")
         )
     await update.effective_message.reply_text("\n".join(lines), parse_mode=HTML)
