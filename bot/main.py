@@ -472,13 +472,19 @@ def main() -> None:
         restore_if_needed(_DB)
     except Exception as exc:
         log.warning("persist boot: %s", exc)
-    log.info("SQLite (WAL) at %s", _DB)
+    if _pg_engine():
+        log.info("Database: Postgres (persistent, DATABASE_URL)")
+    else:
+        log.info("SQLite (WAL) at %s", _DB)
     db.init_db()
     try:
-        if not db.integrity_ok():
+        if _pg_engine():
+            _hok, _hdet = db.pg_health()
+            (log.info if _hok else log.error)("Postgres health: %s", _hdet)
+        elif not db.integrity_ok():
             log.warning("SQLite integrity check failed, continuing anyway")
-    except Exception:
-        pass
+    except Exception as exc:
+        log.warning("DB health check skipped: %s", exc)
     try:
         application = build_application()
     except RuntimeError as exc:
