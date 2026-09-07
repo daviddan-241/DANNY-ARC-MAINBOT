@@ -41,6 +41,7 @@ def tools_kb() -> InlineKeyboardMarkup:
         [_btn("🕐 Active Orders", "nav:orders"), _btn("🔗 Chains", "nav:chains")],
         [_btn("💸 Cashback", "nav:cash"), _btn("💰 Referral", "nav:ref")],
         [_btn("⚙️ Settings", "nav:settings"), _btn("🇺🇸 Language", "nav:lang")],
+        [_btn("🛠 All Services", "arc:root")],
         [_btn("🔙 Main", "nav:main")],
     ]
     return InlineKeyboardMarkup(rows)

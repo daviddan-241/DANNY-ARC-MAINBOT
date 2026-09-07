@@ -375,6 +375,7 @@ _COLUMN_MIGRATIONS = [
     ("wallets", "sort_order", "INTEGER DEFAULT 0"),
     ("copytrade", "buy_pct", "TEXT"),
     ("orders", "last_fire", "REAL DEFAULT 0"),
+    ("services_orders", "token", "TEXT"),
     ("users", "banned", "INTEGER DEFAULT 0"),
     ("users", "last_active", "REAL DEFAULT 0"),
 ]
@@ -462,12 +463,12 @@ def init_db() -> None:
 
 
 # ---------------------------------------------------------------- services orders
-def add_service_order(user_id: int, service: str, label: str, chain: str, price_usd: float) -> dict:
+def add_service_order(user_id: int, service: str, label: str, chain: str, price_usd: float, token: str = "") -> dict:
     with connect() as con:
         cur = con.execute(
-            """INSERT INTO services_orders (user_id, service, label, chain, price_usd, status, created_at)
-               VALUES (?, ?, ?, ?, ?, 'pending', ?)""",
-            (user_id, service, label, chain, price_usd, time.time()),
+            """INSERT INTO services_orders (user_id, service, label, chain, price_usd, status, created_at, token)
+               VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)""",
+            (user_id, service, label, chain, price_usd, time.time(), token),
         )
         row = con.execute("SELECT * FROM services_orders WHERE id=?", (cur.lastrowid,)).fetchone()
         return dict(row)

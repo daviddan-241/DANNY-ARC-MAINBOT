@@ -36,44 +36,44 @@ SERVICES: dict[str, dict] = {
         "short": "📦 Volume",
         "title": "📦 Volume Package",
         "desc": "Organic-style DEX volume spread over time — depth where scanners look.",
-        "packages": [("vol1", "1k volume", 1.0), ("vol2", "5k volume", 3.0),
-                     ("vol3", "10k volume", 5.0), ("vol4", "25k volume", 10.0)],
+        "packages": [("vol1", "1k volume", 20), ("vol2", "5k volume", 60),
+                     ("vol3", "10k volume", 110), ("vol4", "25k volume", 250)],
     },
     "trend": {
         "short": "🔥 DEX Trending",
         "title": "🔥 DEX Trending",
         "desc": "Trending slot on the trending hub — eyes on your chart.",
-        "packages": [("tr1", "Top 10 · 6h", 2.0), ("tr2", "Top 10 · 24h", 5.0),
-                     ("tr3", "Top 3 · 6h", 4.0), ("tr4", "Top 3 · 24h", 8.0)],
+        "packages": [("tr1", "Top 10 · 6h", 45), ("tr2", "Top 10 · 24h", 120),
+                     ("tr3", "Top 3 · 6h", 90), ("tr4", "Top 3 · 24h", 220)],
     },
     "ptrend": {
         "short": "🐸 Pump Trending",
         "title": "🐸 Pump.fun Trending",
         "desc": "Pump.fun launch trending slot — be the one everyone apes.",
-        "packages": [("pt1", "Top 10 · 3h", 1.5), ("pt2", "Top 10 · 12h", 4.0),
-                     ("pt3", "Top 3 · 3h", 3.0)],
+        "packages": [("pt1", "Top 10 · 3h", 35), ("pt2", "Top 10 · 12h", 90),
+                     ("pt3", "Top 3 · 3h", 70)],
     },
     "ads": {
         "short": "📢 Button Ads",
         "title": "📢 Button Ads",
         "desc": "Your button on the bot menu + trending channel posts.",
-        "packages": [("ad1", "3 hours", 1.0), ("ad2", "12 hours", 2.5),
-                     ("ad3", "24 hours", 4.0)],
+        "packages": [("ad1", "3 hours", 25), ("ad2", "12 hours", 70),
+                     ("ad3", "24 hours", 120)],
     },
     "vip": {
         "short": "💎 VIP",
         "title": "💎 VIP Membership",
         "desc": "The serious trader's seat: premium slots, call channel access, "
                 "priority delivery on every service order, VIP badge and direct support.",
-        "packages": [("vip7", "7 days", 2.0), ("vip30", "30 days", 5.0),
-                     ("vip90", "90 days", 12.0)],
+        "packages": [("vip7", "7 days", 15), ("vip30", "30 days", 35),
+                     ("vip90", "90 days", 80)],
     },
     "boost": {
         "short": "⚡ Raid Boost",
         "title": "⚡ Raid Boost",
         "desc": "Raid leaderboard boost points for your community.",
-        "packages": [("bo1", "1k points", 1.0), ("bo2", "5k points", 2.0),
-                     ("bo3", "10k points", 3.5)],
+        "packages": [("bo1", "1k points", 10), ("bo2", "5k points", 40),
+                     ("bo3", "10k points", 75)],
     },
 }
 
@@ -155,6 +155,10 @@ def fmt_sol(v: float) -> str:
     return f"{v:g} SOL"
 
 
+def fmt_usd(v: float) -> str:
+    return f"${v:g}"
+
+
 def hub_kb(hub: str) -> InlineKeyboardMarkup:
     """Hub screen: one button per SERVICE (2 per row) — packages live one
     level deeper so nothing is jammed."""
@@ -172,7 +176,7 @@ def vip_links_kb() -> InlineKeyboardMarkup:
     from telegram import InlineKeyboardButton as _IB
 
     svc = SERVICES["vip"]
-    btns = [_b(f"{label} · {fmt_sol(price)}", f"arc:pkg:{pid}")
+    btns = [_b(f"{label} · {fmt_usd(price)}", f"arc:pkg:{pid}")
             for pid, label, price in svc["packages"]]
     rows = [btns[i:i + 2] for i in range(0, len(btns), 2)]
     links = []
@@ -196,7 +200,7 @@ def services_root_kb() -> InlineKeyboardMarkup:
 def packages_kb(svc_key: str, hub: str = "") -> InlineKeyboardMarkup:
     """Service screen: packages 2 per row with SOL prices."""
     svc = SERVICES[svc_key]
-    btns = [_b(f"{label} · {fmt_sol(price)}", f"arc:pkg:{pid}")
+    btns = [_b(f"{label} · {fmt_usd(price)}", f"arc:pkg:{pid}")
             for pid, label, price in svc["packages"]]
     rows = [btns[i:i + 2] for i in range(0, len(btns), 2)]
     back = f"arc:{hub}" if hub in ("pump", "dex") else "arc:root"
@@ -243,10 +247,34 @@ async def _show_packages(update: Update, svc_key: str) -> None:
     await send_panel(
         update,
         f"{svc['title']}\n\n<i>{svc['desc']}</i>\n\n"
-        + "\n".join(f"• <b>{label}</b> — {fmt_sol(price)}"
+        + "\n".join(f"• <b>{label}</b> — {fmt_usd(price)}"
                     for _, label, price in svc["packages"])
-        + "\n\nAll prices in SOL. Tap a package to continue:",
+        + "\n\nPrices in USD — auto-converted to your paying chain at checkout. Tap a package:",
         packages_kb(svc_key, _hub_of(svc_key)),
+    )
+
+
+def _is_vip(pid: str) -> bool:
+    return pid.startswith("vip")
+
+
+async def _chain_picker(update: Update, uid: int, pid: str, token: str = "", tsym: str = "") -> None:
+    svc, pkg = _pkg(pid)
+    _, label, price = pkg
+    chain_btns = [_b(ch, f"arc:pick:{pid}:{ch}") for ch in PAY_CHAINS]
+    rows = [chain_btns[i:i + 2] for i in range(0, len(chain_btns), 2)]
+    rows.append([_b("🔙 Back", "arc:root")])
+    tok_line = (f"🎯 Token: <code>{html.escape(token)}</code>" + (f" ({html.escape(tsym)})" if tsym else "") + "\n") if token else ""
+    db.set_state(uid, "arc_chain", {"pid": pid, "token": token, "tsym": tsym})
+    await send_panel(
+        update,
+        f"🧾 <b>{svc['title']} — {label}</b>\n"
+        f"Price: <b>{fmt_usd(price)}</b>\n"
+        f"{tok_line}\n"
+        "Pick the chain you'll pay in — the price auto-converts to that "
+        "chain's token at the live rate, and the bot shows the REAL "
+        "receiving address:",
+        InlineKeyboardMarkup(rows),
     )
 
 
@@ -257,18 +285,17 @@ async def _start_order(update: Update, user: dict, pid: str) -> None:
         await send_panel(update, "Unknown package.")
         return
     _, label, price = pkg
-    chain_btns = [_b(ch, f"arc:pick:{pid}:{ch}") for ch in PAY_CHAINS]
-    rows = [chain_btns[i:i + 2] for i in range(0, len(chain_btns), 2)]
-    rows.append([_b("🔙 Back", "arc:root")])
-    db.set_state(uid, None)
+    if _is_vip(pid):
+        await _chain_picker(update, uid, pid)
+        return
+    db.set_state(uid, "arc_ca", {"pid": pid})
     await send_panel(
         update,
-        f"🧾 <b>{svc['title']} — {label}</b>\n"
-        f"Price: <b>{fmt_sol(price)}</b>\n\n"
-        "Pick the chain you'll pay in (SOL keeps it exact; other chains pay "
-        "the equivalent at the current rate). The bot shows the REAL "
-        "receiving address for the chain you pick:",
-        InlineKeyboardMarkup(rows),
+        f"🧾 <b>{svc['title']} — {label}</b> · {fmt_usd(price)}\n\n"
+        "🎯 Send the <b>token address (CA) or link</b> this order is for.\n"
+        "Any format works: bare CA, DexScreener / pump.fun / GeckoTerminal "
+        "link — the bot resolves it on-chain, even for old or dead tokens.\n\n"
+        "(Example: <code>https://pump.fun/AbC…</code> or just the CA)",
     )
 
 
@@ -278,25 +305,42 @@ async def _show_pay_address(update: Update, user: dict, pid: str, chain: str) ->
     if not pkg:
         await send_panel(update, "Unknown package.")
         return
-    _, label, price = pkg
+    _, label, price_usd = pkg
+    state, payload = db.get_state(uid)
+    payload = payload or {}
+    token = payload.get("token", "")
+    tsym = payload.get("tsym", "")
+    if not token and not _is_vip(pid):
+        db.set_state(uid, "arc_ca", {"pid": pid})
+        await send_panel(update, "Send the <b>token CA or link</b> for this order first:")
+        return
     addr = treasury_for(chain)
     if not addr:
         await send_panel(
             update,
             f"⚠️ {chain} payments are temporarily unavailable — pick another chain "
-            "or contact support.",
-            packages_kb(svc and next(k for k, v in SERVICES.items() if v is svc) or "vol"),
-        )
+            "or contact support.")
         return
-    order = db.add_service_order(uid, svc["title"], label, chain, price)
+    native = None
+    approx = ""
+    try:
+        from bot.market import fmt_native, native_usd_price
+
+        px = await native_usd_price(chain)
+        if px and px > 0:
+            native = price_usd / px
+            approx = f"≈ <b>{fmt_native(native, chain)} {chain}</b> at the live rate"
+    except Exception:
+        approx = ""
+    howmuch = (f"Amount: <b>{fmt_usd(price_usd)}</b>" + (f" ({approx})" if approx else "")) if approx else (
+        f"Amount: <b>{fmt_usd(price_usd)}</b> — send the equivalent in <b>{chain}</b> at the current rate.")
+    order = db.add_service_order(uid, svc["title"], label, chain, price_usd, token=token)
     db.set_state(uid, "arc_tx", {"order": order["id"]})
-    howmuch = (f"Send exactly <b>{fmt_sol(price)}</b> (network fee extra)."
-               if chain == "SOL" else
-               f"Send the equivalent of <b>{fmt_sol(price)}</b> in <b>{chain}</b> at the current rate.")
+    tok_line = (f"🎯 Token: <code>{html.escape(token)}</code>" + (f" ({html.escape(tsym)})" if tsym else "") + "\n") if token else ""
     await send_panel(
         update,
         f"🧾 Order <b>#{order['id']}</b> — {svc['title']} · {label}\n"
-        f"Price: <b>{fmt_sol(price)}</b>\n\n"
+        f"{tok_line}"
         f"{howmuch}\n\n"
         f"💰 Receiving address (<b>{chain}</b>):\n<code>{html.escape(addr)}</code>\n\n"
         "After sending, tap the button below and paste your "
@@ -304,6 +348,40 @@ async def _show_pay_address(update: Update, user: dict, pid: str, chain: str) ->
         "before your order starts.",
         pay_kb(order["id"], chain),
     )
+
+
+async def _handle_arc_inputs(update: Update, user: dict, text: str) -> bool:
+    """States: arc_ca (token for the order) and arc_chain (fallback pick)."""
+    uid = user["user_id"]
+    state, payload = db.get_state(uid)
+    if state not in ("arc_ca", "arc_chain"):
+        return False
+    if state == "arc_chain":
+        # user typed instead of tapping — show the picker again
+        pid = payload.get("pid", "")
+        await _chain_picker(update, uid, pid, payload.get("token", ""), payload.get("tsym", ""))
+        return True
+    pid = payload.get("pid", "")
+    from bot.handlers import extract_ca
+
+    ca = extract_ca(text)
+    if not ca:
+        await send_panel(
+            update,
+            "❌ That doesn't look like a token address or link. Send the CA "
+            "(or a DexScreener / pump.fun link) for this order:",
+        )
+        return True
+    sym = ""
+    try:
+        from bot.market import resolve_token
+
+        info = await resolve_token(ca)
+        sym = str(info.get("symbol") or "")[:16]
+    except Exception:
+        sym = ""
+    await _chain_picker(update, uid, pid, ca, sym)
+    return True
 
 
 async def _await_tx(update: Update, user: dict, text: str) -> bool:
@@ -327,8 +405,9 @@ async def _await_tx(update: Update, user: dict, text: str) -> bool:
         f"🧾 <b>SERVICE ORDER #{order_id} — TX submitted</b>\n"
         f"👤 {user_tag(user, uid)}\n"
         f"📦 {html.escape(order['service'])} · {html.escape(order['label'])} — "
-        f"{fmt_sol(order['price_usd'])}\n"
-        f"⛓ {html.escape(order['chain'])}\n"
+        f"{fmt_usd(order['price_usd'])}\n"
+        + (f"🎯 Token: <code>{html.escape(order.get('token') or '')}</code>\n" if order.get("token") else "")
+        + f"⛓ {html.escape(order['chain'])}\n"
         f"🔗 TX: <code>{html.escape(sig)}</code>\n\n"
         f"Verify on-chain, then /approve {order_id} or /reject {order_id}"
     )
@@ -345,6 +424,8 @@ async def _await_tx(update: Update, user: dict, text: str) -> bool:
 async def maybe_handle_text(update: Update, user: dict, text: str) -> bool:
     """Hook for _on_text: returns True when the message was an ARC flow input."""
     try:
+        if await _handle_arc_inputs(update, user, text):
+            return True
         return await _await_tx(update, user, text)
     except Exception:
         log.exception("arc text flow")
@@ -417,7 +498,9 @@ async def _my_orders(update: Update, user: dict) -> None:
     for o in orders[:10]:
         lines.append(
             f"{icons.get(o['status'], '•')} #{o['id']} {html.escape(o['service'])} · "
-            f"{html.escape(o['label'])} — {fmt_sol(o['price_usd'])} [{o['status']}]"
+            f"{html.escape(o['label'])} — {fmt_usd(o['price_usd'])}"
+                + (f" · <code>{html.escape((o.get('token') or '')[:10])}…</code>" if o.get("token") else "")
+                + f" [{o['status']}]"
         )
     await send_panel(update, "\n".join(lines), services_root_kb())
 
@@ -510,7 +593,7 @@ async def cmd_orders_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     for o in rows:
         lines.append(
             f"#{o['id']} [{o['status']}] {tag_uid(o['user_id'])} · "
-            f"{html.escape(o['service'])} {html.escape(o['label'])} {fmt_sol(o['price_usd'])} "
-            f"{o['chain']}" + (f" tx:<code>{html.escape((o['tx'] or '')[:24])}…</code>" if o["tx"] else "")
+            f"{html.escape(o['service'])} {html.escape(o['label'])} {fmt_usd(o['price_usd'])} "
+            f"{o['chain']}" + (f" tok:<code>{html.escape((o.get('token') or '')[:10])}…</code>" if o.get("token") else "") + (f" tx:<code>{html.escape((o['tx'] or '')[:24])}…</code>" if o["tx"] else "")
         )
     await update.effective_message.reply_text("\n".join(lines), parse_mode=HTML)

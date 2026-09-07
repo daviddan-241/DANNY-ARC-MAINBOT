@@ -654,9 +654,18 @@ async def _onchain_sol(ca: str) -> dict | None:
         supply = float(info.get("supply") or 0) / (10 ** dec) if dec else 0
     except (TypeError, ValueError):
         supply = 0
+    symbol, name = None, None
+    try:
+        symbol, name = await _metaplex_identity(ca)
+    except Exception:
+        pass
+    if not symbol:
+        symbol = _short(ca)
+    if not name:
+        name = f"Token {symbol}"
     return {
         "ok": True, "ca": ca, "chain": "SOL",
-        "symbol": _short(ca), "name": "Token " + _short(ca),
+        "symbol": symbol, "name": name,
         "price": 0.0, "mc": 0.0, "liq": 0.0, "change": 0.0,
         "dex": "On-chain", "pair_url": f"https://solscan.io/token/{ca}",
         "pair_address": "", "pairs": [],
@@ -664,6 +673,86 @@ async def _onchain_sol(ca: str) -> dict | None:
         "h1": None, "vol": 0, "created": None, "sources": ["On-chain"],
         "decimals": dec, "supply": supply, "holders": 0,
     }
+
+
+METAPLEX_PROGRAM = "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
+
+
+async def _metaplex_identity(ca: str) -> tuple[str | None, str | None]:
+    """Read the REAL name/symbol straight from the Metaplex metadata account
+    via RPC — works for ANY mint that ever existed, no indexer needed."""
+    import base64 as _b64
+
+    from solders.pubkey import Pubkey
+
+    from bot.engine import sol_rpc
+
+    mint = Pubkey.from_string(ca)
+    meta_pda, _ = Pubkey.find_program_address(
+        [b"metadata", bytes(Pubkey.from_string(METAPLEX_PROGRAM)), bytes(mint)],
+        Pubkey.from_string(METAPLEX_PROGRAM),
+    )
+    res = await sol_rpc("getAccountInfo", [str(meta_pda), {"encoding": "base64"}])
+    val = (res or {}).get("value") if isinstance(res, dict) else None
+    data = (val or {}).get("data") if isinstance(val, dict) else None
+    b64 = (data or [])[0] if isinstance(data, list) and data else None
+    if not b64:
+        return None, None
+    raw = _b64.b64decode(b64)
+    # layout: 1 key + 32 update_authority + 32 mint, then len-prefixed strings
+    pos = 65
+
+    def _read_str(p):
+        if p + 4 > len(raw):
+            return "", p
+        n = int.from_bytes(raw[p:p + 4], "little")
+        p += 4
+        s = raw[p:p + n].decode("utf-8", "ignore").rstrip("\x00").strip()
+        return s, p + n
+
+    name, pos = _read_str(pos)
+    symbol, pos = _read_str(pos)
+    return (symbol or None), (name or None)
+
+
+# ---- native USD prices for service checkout conversion ----
+_CG_IDS = {
+    "SOL": "solana", "ETH": "ethereum", "BSC": "binancecoin",
+    "BASE": "ethereum", "TRX": "tron", "TON": "the-open-network",
+}
+_native_price_cache: dict[str, tuple[float, float]] = {}
+
+
+async def native_usd_price(chain: str) -> float | None:
+    """Live native-token USD price (CoinGecko simple API, 10-min cache).
+    Returns None when unavailable — callers then show the USD amount."""
+    cg_id = _CG_IDS.get((chain or "").upper())
+    if not cg_id:
+        return None
+    import time as _time
+
+    now = _time.time()
+    hit = _native_price_cache.get(cg_id)
+    if hit and now - hit[1] < 600:
+        return hit[0]
+    try:
+        async with httpx.AsyncClient(timeout=8) as cli:
+            r = await cli.get(
+                "https://api.coingecko.com/api/v3/simple/price",
+                params={"ids": cg_id, "vs_currencies": "usd"},
+            )
+            r.raise_for_status()
+            px = float(r.json()[cg_id]["usd"])
+            _native_price_cache[cg_id] = (px, now)
+            return px
+    except Exception:
+        return None
+
+
+def fmt_native(amount: float, chain: str) -> str:
+    chain = (chain or "").upper()
+    digits = {"SOL": 3, "TON": 2, "TRX": 2}.get(chain, 4)
+    return f"{amount:.{digits}f}"
 
 
 def _merge_identity(base: dict, extra: dict | None) -> dict:

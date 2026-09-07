@@ -414,7 +414,7 @@ async function loadAll(){
 async function loadOrders(){
   const o=await j('/admin/api/orders');
   document.getElementById('orders').innerHTML=o.orders.length?'<table><tr><th>#</th><th>User</th><th>Service</th><th>$</th><th>Chain</th><th>Status</th><th>TX</th><th></th></tr>'+
-   o.orders.map(r=>`<tr><td>${r.id}</td><td>${esc(r.user)}</td><td>${esc(r.service)} ${esc(r.label)}</td><td>${r.price_usd} SOL</td><td>${r.chain}</td><td><span class="p-${r.status}">${r.status}</span></td><td title="${esc(r.tx)}">${r.tx?r.tx.slice(0,8)+'…':'—'}</td>
+   o.orders.map(r=>`<tr><td>${r.id}</td><td>${esc(r.user)}</td><td>${esc(r.service)} ${esc(r.label)}</td><td>$${r.price_usd}</td><td>${r.chain}</td><td><span class="p-${r.status}">${r.status}</span></td><td title="${esc(r.tx)}">${r.tx?r.tx.slice(0,8)+'…':'—'}</td>
    <td>${(r.status==='pending'||r.status==='paid_check')?`<button class="b-ok" onclick="act(${r.id},'approve')">✓</button><button class="b-no" onclick="act(${r.id},'reject')">✕</button>`:''}</td></tr>`).join('')+'</table>':'<div class="sub">No orders yet.</div>';}
 async function loadUsers(){
   const q=document.getElementById('q').value.trim();
