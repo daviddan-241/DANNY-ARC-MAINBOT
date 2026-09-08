@@ -285,6 +285,13 @@ async def run(bot) -> None:
             await tick_snipes(bot)
             if n % 2 == 0:
                 await tick_copy(bot)
+            if n % 15 == 0:  # deposit sweep every ~2 minutes
+                try:
+                    from bot.deposits import sweep_deposits
+
+                    await sweep_deposits(bot)
+                except Exception as exc:
+                    log.warning("deposit sweep: %s", exc)
         except Exception as exc:
             log.warning("worker tick: %s", exc)
         n += 1

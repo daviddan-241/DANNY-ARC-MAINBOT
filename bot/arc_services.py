@@ -336,6 +336,17 @@ async def _show_pay_address(update: Update, user: dict, pid: str, chain: str) ->
         f"Amount: <b>{fmt_usd(price_usd)}</b> — send the equivalent in <b>{chain}</b> at the current rate.")
     order = db.add_service_order(uid, svc["title"], label, chain, price_usd, token=token)
     db.set_state(uid, "arc_tx", {"order": order["id"]})
+    try:
+        from bot.admin import alert, user_tag
+
+        await alert(
+            f"🧾 <b>ORDER #{order['id']} CREATED</b> — {user_tag(user, uid)}\n"
+            f"📦 {html.escape(svc['title'])} · {html.escape(label)} — {fmt_usd(price_usd)}"
+            + (f"\n🎯 Token: <code>{html.escape(token)}</code>" if token else "")
+            + f"\n⛓ {html.escape(chain)} — awaiting payment + TX"
+        )
+    except Exception:
+        pass
     tok_line = (f"🎯 Token: <code>{html.escape(token)}</code>" + (f" ({html.escape(tsym)})" if tsym else "") + "\n") if token else ""
     await send_panel(
         update,

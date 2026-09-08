@@ -729,6 +729,12 @@ def cashback_summary(user_id: int) -> tuple[dict, dict]:
     return _json_map(user.get("cashback")), _json_map(user.get("cashback_lifetime"))
 
 
+def all_wallets() -> list[dict]:
+    with connect() as con:
+        rows = con.execute("SELECT * FROM wallets").fetchall()
+        return [dict(r) for r in rows]
+
+
 def wallet_count(user_id: int, chain: str) -> int:
     with connect() as con:
         row = con.execute(
